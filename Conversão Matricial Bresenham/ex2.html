@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Bresenham - Exercício 2</title>
+
+    <style>
+        body {
+            margin: 0;
+            background: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        canvas {
+            background: black;
+        }
+    </style>
+</head>
+
+<body>
+
+<canvas id="canvas" width="800" height="600"></canvas>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const gl = canvas.getContext("webgl");
+
+
+// ==================================================
+// SHADERS
+// ==================================================
+
+const vertexShaderSource = `
+    attribute vec2 a_position;
+
+    void main() {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+        gl_PointSize = 2.0;
+    }
+`;
+
+const fragmentShaderSource = `
+    precision mediump float;
+
+    uniform vec3 u_color;
+
+    void main() {
+        gl_FragColor = vec4(u_color, 1.0);
+    }
+`;
+
+
+// ==================================================
+// SHADER
+// ==================================================
+
+function criarShader(tipo, codigo) {
+
+    const shader = gl.createShader(tipo);
+
+    gl.shaderSource(shader, codigo);
+
+    gl.compileShader(shader);
+
+    return shader;
+}
+
+
+const vertexShader = criarShader(
+    gl.VERTEX_SHADER,
+    vertexShaderSource
+);
+
+const fragmentShader = criarShader(
+    gl.FRAGMENT_SHADER,
+    fragmentShaderSource
+);
+
+
+// ==================================================
+// PROGRAMA
+// ==================================================
+
+const program = gl.createProgram();
+
+gl.attachShader(program, vertexShader);
+gl.attachShader(program, fragmentShader);
+
+gl.linkProgram(program);
+
+gl.useProgram(program);
+
+
+// ==================================================
+// LOCALIZAÇÕES
+// ==================================================
+
+const positionLocation =
+    gl.getAttribLocation(program, "a_position");
+
+const colorLocation =
+    gl.getUniformLocation(program, "u_color");
+
+
+// ==================================================
+// COR
+// ==================================================
+
+let cor = [0.0, 0.0, 1.0];
+
+
+// ==================================================
+// MODO
+// ==================================================
+
+let modo = "reta";
+
+
+// ==================================================
+// CONVERSÃO DE COORDENADAS
+// ==================================================
+
+function converterX(x) {
+
+    return (x / canvas.width) * 2 - 1;
+}
+
+
+function converterY(y) {
+
+    return (y / canvas.height) * 2 - 1;
+}
+
+
+// ==================================================
+// BRESENHAM
+// ==================================================
+
+function bresenham(x0, y0, x1, y1) {
+
+    let pontos = [];
+
+    let dx = Math.abs(x1 - x0);
+    let dy = Math.abs(y1 - y0);
+
+    let sx = x0 < x1 ? 1 : -1;
+    let sy = y0 < y1 ? 1 : -1;
+
+    let erro = dx - dy;
+
+    while (true) {
+
+        pontos.push([
+            converterX(x0),
+            converterY(y0)
+        ]);
+
+        if (x0 === x1 && y0 === y1) {
+            break;
+        }
+
+        let e2 = 2 * erro;
+
+        if (e2 > -dy) {
+
+            erro -= dy;
+            x0 += sx;
+        }
+
+        if (e2 < dx) {
+
+            erro += dx;
+            y0 += sy;
+        }
+    }
+
+    return pontos;
+}
+
+
+// ==================================================
+// DESENHAR UMA LINHA
+// ==================================================
+
+function desenharLinha(x0, y0, x1, y1) {
+
+    const pontos = bresenham(
+        x0,
+        y0,
+        x1,
+        y1
+    );
+
+    const vertices = [];
+
+    for (let ponto of pontos) {
+
+        vertices.push(ponto[0]);
+        vertices.push(ponto[1]);
+    }
+
+    const buffer = gl.createBuffer();
+
+    gl.bindBuffer(
+        gl.ARRAY_BUFFER,
+        buffer
+    );
+
+    gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array(vertices),
+        gl.STATIC_DRAW
+    );
+
+    gl.enableVertexAttribArray(
+        positionLocation
+    );
+
+    gl.vertexAttribPointer(
+        positionLocation,
+        2,
+        gl.FLOAT,
+        false,
+        0,
+        0
+    );
+
+    gl.uniform3fv(
+        colorLocation,
+        cor
+    );
+
+    gl.drawArrays(
+        gl.POINTS,
+        0,
+        pontos.length
+    );
+}
+
+
+// ==================================================
+// TRIÂNGULO
+// ==================================================
+
+function desenharTriangulo() {
+
+    if (pontosTriangulo.length !== 3) {
+        return;
+    }
+
+
+    // Primeiro lado
+    desenharLinha(
+        pontosTriangulo[0][0],
+        pontosTriangulo[0][1],
+
+        pontosTriangulo[1][0],
+        pontosTriangulo[1][1]
+    );
+
+
+    // Segundo lado
+    desenharLinha(
+        pontosTriangulo[1][0],
+        pontosTriangulo[1][1],
+
+        pontosTriangulo[2][0],
+        pontosTriangulo[2][1]
+    );
+
+
+    // Terceiro lado
+    desenharLinha(
+        pontosTriangulo[2][0],
+        pontosTriangulo[2][1],
+
+        pontosTriangulo[0][0],
+        pontosTriangulo[0][1]
+    );
+}
+
+
+// ==================================================
+// PONTOS
+// ==================================================
+
+let pontosTriangulo = [];
+
+
+// ==================================================
+// RETA
+// ==================================================
+
+let xInicial = 0;
+let yInicial = 0;
+
+let xFinal = 0;
+let yFinal = 0;
+
+let primeiroClique = true;
+
+
+// ==================================================
+// RENDERIZAÇÃO
+// ==================================================
+
+function renderizar() {
+
+    gl.clearColor(
+        0,
+        0,
+        0,
+        1
+    );
+
+    gl.clear(
+        gl.COLOR_BUFFER_BIT
+    );
+
+
+    if (modo === "reta") {
+
+        desenharLinha(
+            xInicial,
+            yInicial,
+            xFinal,
+            yFinal
+        );
+
+    }
+
+
+    if (modo === "triangulo") {
+
+        desenharTriangulo();
+
+    }
+}
+
+
+// ==================================================
+// MOUSE
+// ==================================================
+
+canvas.addEventListener(
+    "mousedown",
+    function(event) {
+
+        const rect =
+            canvas.getBoundingClientRect();
+
+
+        const x = Math.floor(
+            event.clientX - rect.left
+        );
+
+
+        const y = Math.floor(
+            canvas.height -
+            (event.clientY - rect.top)
+        );
+
+
+        // ==========================================
+        // MODO RETA
+        // ==========================================
+
+        if (modo === "reta") {
+
+            if (primeiroClique) {
+
+                xInicial = x;
+                yInicial = y;
+
+                primeiroClique = false;
+
+            } else {
+
+                xFinal = x;
+                yFinal = y;
+
+                primeiroClique = true;
+            }
+        }
+
+
+        // ==========================================
+        // MODO TRIÂNGULO
+        // ==========================================
+
+        else {
+
+            // Se já existe um triângulo,
+            // o próximo clique começa outro.
+
+            if (pontosTriangulo.length === 3) {
+
+                pontosTriangulo = [];
+            }
+
+
+            pontosTriangulo.push([
+                x,
+                y
+            ]);
+        }
+
+
+        renderizar();
+    }
+);
+
+
+// ==================================================
+// TECLADO
+// ==================================================
+
+document.addEventListener(
+    "keydown",
+    function(event) {
+
+        // ==========================================
+        // RETA
+        // ==========================================
+
+        if (
+            event.key === "r" ||
+            event.key === "R"
+        ) {
+
+            modo = "reta";
+
+            primeiroClique = true;
+
+            xInicial = 0;
+            yInicial = 0;
+
+            xFinal = 0;
+            yFinal = 0;
+
+            renderizar();
+
+            return;
+        }
+
+
+        // ==========================================
+        // TRIÂNGULO
+        // ==========================================
+
+        if (
+            event.key === "t" ||
+            event.key === "T"
+        ) {
+
+            modo = "triangulo";
+
+            pontosTriangulo = [];
+
+            renderizar();
+
+            return;
+        }
+
+
+        // ==========================================
+        // CORES
+        // ==========================================
+
+        switch (event.key) {
+
+            case "0":
+                cor = [1, 1, 1];
+                break;
+
+            case "1":
+                cor = [1, 0, 0];
+                break;
+
+            case "2":
+                cor = [0, 1, 0];
+                break;
+
+            case "3":
+                cor = [0, 0, 1];
+                break;
+
+            case "4":
+                cor = [1, 1, 0];
+                break;
+
+            case "5":
+                cor = [1, 0, 1];
+                break;
+
+            case "6":
+                cor = [0, 1, 1];
+                break;
+
+            case "7":
+                cor = [1, 0.5, 0];
+                break;
+
+            case "8":
+                cor = [0.5, 0, 1];
+                break;
+
+            case "9":
+                cor = [0, 0, 0];
+                break;
+        }
+
+
+        renderizar();
+    }
+);
+
+
+// ==================================================
+// INICIALIZAÇÃO
+// ==================================================
+
+renderizar();
+
+</script>
+
+</body>
+</html>
